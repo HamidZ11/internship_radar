@@ -28,7 +28,7 @@ const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
   { value: "new",          label: "New" },
   { value: "applied",      label: "Applied" },
-  { value: "interviewing", label: "Interviewing" },
+  { value: "interview",    label: "Interviewing" },
   { value: "rejected",     label: "Rejected" },
   { value: "offer",        label: "Offer" },
 ];

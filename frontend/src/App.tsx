@@ -4,6 +4,7 @@ import FilterBar from "./components/Filters";
 import JobList from "./components/JobList";
 import JobDetail from "./components/JobDetail";
 import AppliedDashboard from "./components/AppliedDashboard";
+import AddJobModal from "./components/AddJobModal";
 
 const DEBOUNCE_MS = 300;
 
@@ -51,6 +52,7 @@ export default function App() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAddJob, setShowAddJob] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -171,7 +173,10 @@ export default function App() {
 
         {/* spacer + right side */}
         <div className="ml-auto flex items-center gap-3">
-          <button className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 h-8 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+          <button
+            onClick={() => setShowAddJob(true)}
+            className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 h-8 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+          >
             + Add Job
           </button>
           <div className="w-8 h-8 rounded-full bg-[#003fa3] flex items-center justify-center">
@@ -247,6 +252,17 @@ export default function App() {
         )}
 
       </div>
+
+      {showAddJob && (
+        <AddJobModal
+          onClose={() => setShowAddJob(false)}
+          onAdded={(job) => {
+            setJobs((prev) => [job, ...prev]);
+            setSelectedJob(job);
+            setActiveTab("dashboard");
+          }}
+        />
+      )}
     </div>
   );
 }
