@@ -14,6 +14,17 @@ class JobCreate(BaseModel):
     deadline: date | None = None
 
 
+ALLOWED_STATUSES = {"new", "applied", "interview", "rejected", "offer"}
+
+
+class SavedUpdate(BaseModel):
+    is_saved: bool
+
+
+class StatusUpdate(BaseModel):
+    status: str
+
+
 class JobResponse(BaseModel):
     id: int
     title: str
@@ -27,6 +38,7 @@ class JobResponse(BaseModel):
     deadline: date | None
     fit_score: int
     status: str
+    is_saved: bool
     created_at: datetime
     updated_at: datetime
 
