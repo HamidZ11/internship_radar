@@ -1,5 +1,7 @@
 # Internship Radar
 
+[![CI](https://github.com/HamidZ11/internship_radar/actions/workflows/ci.yml/badge.svg)](https://github.com/HamidZ11/internship_radar/actions/workflows/ci.yml)
+
 A personal tool for tracking, scoring, and managing software engineering internship and placement applications — built to cut through the noise of job boards.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green) ![React](https://img.shields.io/badge/React-18-61dafb) ![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791)
