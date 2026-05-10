@@ -22,13 +22,11 @@ A personal tool for tracking, scoring, and managing software engineering interns
 
 ## Screenshots
 
-### Main Dashboard
+<p align="center">
+  <img src="./screenshots/dashboard.png" width="48%" />
+  <img src="./screenshots/applied.png" width="48%" />
+</p>
 
-![Dashboard](./screenshots/dashboard.png)
-
-### Application Tracking
-
-![Application Tracking](./screenshots/applied.png)
 
 ## Tech Stack
 
