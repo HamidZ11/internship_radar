@@ -18,6 +18,18 @@ A personal tool for tracking, scoring, and managing software engineering interns
 
 ---
 
+---
+
+## Screenshots
+
+### Main Dashboard
+
+![Dashboard](./screenshots/dashboard.png)
+
+### Application Tracking
+
+![Application Tracking](./screenshots/applied.png)
+
 ## Tech Stack
 
 | Layer | Technology |
