@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Job } from "../types";
 
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 interface Props {
   onClose: () => void;
   onAdded: (job: Job) => void;
@@ -79,7 +81,7 @@ export default function AddJobModal({ onClose, onAdded }: Props) {
         deadline: form.deadline || null,
         posted_date: null,
       };
-      const res = await fetch("http://localhost:8000/jobs", {
+      const res = await fetch(`${API}/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

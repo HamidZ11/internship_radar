@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Job } from "../types";
 
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const ICON_COLORS = [
   "bg-slate-800", "bg-indigo-700", "bg-gray-900",
   "bg-blue-800", "bg-violet-800", "bg-emerald-800",
@@ -48,7 +50,7 @@ export default function AppliedDashboard() {
 
   function fetchAll() {
     setLoading(true);
-    fetch("http://localhost:8000/jobs?limit=200")
+    fetch(`${API}/jobs?limit=200`)
       .then((r) => r.json() as Promise<Job[]>)
       .then((jobs) => { setAllJobs(jobs); setLoading(false); })
       .catch(() => setLoading(false));
@@ -56,7 +58,7 @@ export default function AppliedDashboard() {
 
   function patchStatus(job: Job, newStatus: string) {
     setOpenMenu(null);
-    fetch(`http://localhost:8000/jobs/${job.id}/status`, {
+    fetch(`${API}/jobs/${job.id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),

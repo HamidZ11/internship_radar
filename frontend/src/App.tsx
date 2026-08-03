@@ -6,6 +6,8 @@ import JobDetail from "./components/JobDetail";
 import AppliedDashboard from "./components/AppliedDashboard";
 import AddJobModal from "./components/AddJobModal";
 
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const DEBOUNCE_MS = 300;
 
 const EMPTY_FILTERS: Filters = {
@@ -61,7 +63,7 @@ export default function App() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(() => {
-      const url = `http://localhost:8000/jobs?${buildQuery(filters, activeTab)}`;
+      const url = `${API}/jobs?${buildQuery(filters, activeTab)}`;
       setLoading(true);
       setError(null);
 
@@ -93,7 +95,7 @@ export default function App() {
 
   function toggleSaved(job: Job) {
     const next = !job.is_saved;
-    fetch(`http://localhost:8000/jobs/${job.id}/saved`, {
+    fetch(`${API}/jobs/${job.id}/saved`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ is_saved: next }),
@@ -115,7 +117,7 @@ export default function App() {
   }
 
   function updateStatus(job: Job, newStatus: string) {
-    fetch(`http://localhost:8000/jobs/${job.id}/status`, {
+    fetch(`${API}/jobs/${job.id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
