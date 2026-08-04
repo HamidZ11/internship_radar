@@ -255,6 +255,18 @@ export default function App() {
 
       </div>
 
+      {/* ── Footer ── */}
+      <footer className="shrink-0 h-7 bg-white border-t border-slate-200 flex items-center justify-center">
+        <a
+          href="https://logo.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] text-slate-400 hover:text-slate-500 transition-colors"
+        >
+          Logos by Logo.dev
+        </a>
+      </footer>
+
       {showAddJob && (
         <AddJobModal
           onClose={() => setShowAddJob(false)}

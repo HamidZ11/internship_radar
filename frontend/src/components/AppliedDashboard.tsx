@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Job } from "../types";
+import CompanyLogo from "./CompanyLogo";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -148,13 +149,10 @@ export default function AppliedDashboard() {
           <div className="space-y-3" ref={containerRef}>
             {trackedJobs.map((job) => {
               const cfg = STATUS_CONFIG[job.status] ?? { label: job.status, cls: "bg-slate-100 border-slate-200 text-slate-600" };
-              const bg = iconColor(job.company);
               return (
                 <div key={job.id} className="bg-white p-5 border border-slate-200 rounded-xl flex items-center justify-between gap-4 hover:shadow-md transition-shadow">
                   <div className="flex items-center gap-4 min-w-0">
-                    <div className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${bg}`}>
-                      <span className="text-sm font-bold text-white select-none">{job.company.charAt(0).toUpperCase()}</span>
-                    </div>
+                    <CompanyLogo company={job.company} size={44} rounded="rounded-lg" textSize="text-sm" />
                     <div className="min-w-0">
                       <h4 className="text-sm font-semibold text-slate-900 leading-tight truncate">{job.title}</h4>
                       <p className="text-slate-500 text-xs mt-0.5">{job.company} · {job.location}</p>

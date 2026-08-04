@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Job } from "../types";
+import CompanyLogo from "./CompanyLogo";
 
 interface Props {
   job: Job | null;
@@ -184,11 +185,7 @@ export default function JobDetail({ job, onToggleSaved, onUpdateStatus }: Props)
 
             {/* hero row */}
             <div className="flex items-start gap-4">
-              <div className={`shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center ${bg}`}>
-                <span className="text-xl font-bold text-white select-none">
-                  {job.company.charAt(0).toUpperCase()}
-                </span>
-              </div>
+              <CompanyLogo company={job.company} size={56} rounded="rounded-2xl" textSize="text-xl" />
 
               <div className="flex-1 min-w-0">
                 <h2 className="text-2xl font-bold text-slate-900 leading-tight">{job.title}</h2>

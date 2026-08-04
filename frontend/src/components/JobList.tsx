@@ -1,20 +1,10 @@
 import { Job } from "../types";
+import CompanyLogo from "./CompanyLogo";
 
 interface Props {
   jobs: Job[];
   selectedId: number | null;
   onSelect: (job: Job) => void;
-}
-
-const ICON_COLORS = [
-  "bg-slate-800", "bg-indigo-700", "bg-gray-900",
-  "bg-blue-800", "bg-violet-800", "bg-emerald-800",
-];
-
-function iconColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
-  return ICON_COLORS[Math.abs(h) % ICON_COLORS.length];
 }
 
 function ScoreBadge({ score }: { score: number }) {
@@ -45,7 +35,6 @@ export default function JobList({ jobs, selectedId, onSelect }: Props) {
     <ul className="flex flex-col gap-2.5">
       {jobs.map((job) => {
         const active = job.id === selectedId;
-        const bg = iconColor(job.company);
 
         return (
           <li
@@ -58,11 +47,7 @@ export default function JobList({ jobs, selectedId, onSelect }: Props) {
             }`}
           >
             <div className="flex items-start gap-3">
-              <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${bg}`}>
-                <span className="text-xs font-bold text-white select-none">
-                  {job.company.charAt(0).toUpperCase()}
-                </span>
-              </div>
+              <CompanyLogo company={job.company} size={36} rounded="rounded-lg" textSize="text-xs" />
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
