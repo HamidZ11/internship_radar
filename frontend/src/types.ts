@@ -20,6 +20,6 @@ export interface Filters {
   status: string;
   location: string;
   source: string;
-  role_type: string;
+  role_type: string[];
   deadline_filter: string;
 }

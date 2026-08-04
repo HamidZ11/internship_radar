@@ -6,7 +6,7 @@ interface Props {
 }
 
 const EMPTY: Filters = {
-  search: "", min_score: "", status: "", location: "", source: "", role_type: "", deadline_filter: "",
+  search: "", min_score: "", status: "", location: "", source: "", role_type: [], deadline_filter: "",
 };
 
 const DEADLINE_OPTIONS = [
@@ -50,7 +50,14 @@ export default function FilterBar({ filters, onChange }: Props) {
     onChange({ ...filters, [field]: value });
   }
 
-  const hasFilters = Object.values(filters).some(Boolean);
+  function toggleRoleType(value: string) {
+    const next = filters.role_type.includes(value)
+      ? filters.role_type.filter((v) => v !== value)
+      : [...filters.role_type, value];
+    onChange({ ...filters, role_type: next });
+  }
+
+  const hasFilters = Object.values(filters).some((v) => (Array.isArray(v) ? v.length > 0 : Boolean(v)));
 
   return (
     <aside className="flex flex-col h-full w-full bg-white border-r border-slate-200 overflow-hidden">
@@ -76,12 +83,12 @@ export default function FilterBar({ filters, onChange }: Props) {
           <SectionLabel text="Role type" />
           <div className="flex flex-col gap-2.5">
             {ROLE_TYPES.map(({ label, value }) => {
-              const checked = filters.role_type === value;
+              const checked = filters.role_type.includes(value);
               return (
                 <label
                   key={value}
                   className="flex items-center gap-2.5 cursor-pointer group"
-                  onClick={() => set("role_type", checked ? "" : value)}
+                  onClick={() => toggleRoleType(value)}
                 >
                   <div
                     className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${

@@ -11,7 +11,7 @@ const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const DEBOUNCE_MS = 300;
 
 const EMPTY_FILTERS: Filters = {
-  search: "", min_score: "", status: "", location: "", source: "", role_type: "", deadline_filter: "",
+  search: "", min_score: "", status: "", location: "", source: "", role_type: [], deadline_filter: "",
 };
 
 function applyDeadlineFilter(jobs: Job[], filter: string): Job[] {
@@ -30,6 +30,13 @@ function applyDeadlineFilter(jobs: Job[], filter: string): Job[] {
   });
 }
 
+function applyRoleTypeFilter(jobs: Job[], roleTypes: string[]): Job[] {
+  if (roleTypes.length === 0) return jobs;
+  return jobs.filter((j) =>
+    roleTypes.some((rt) => j.role_type.toLowerCase().includes(rt.toLowerCase()))
+  );
+}
+
 type Tab = "dashboard" | "saved" | "applied";
 
 function buildQuery(filters: Filters, tab: Tab): string {
@@ -38,7 +45,6 @@ function buildQuery(filters: Filters, tab: Tab): string {
   if (filters.min_score)   params.set("min_score", filters.min_score);
   if (filters.location)    params.set("location", filters.location);
   if (filters.source)      params.set("source", filters.source);
-  if (filters.role_type)   params.set("role_type", filters.role_type);
   // status filter from sidebar only applies on Dashboard tab
   if (tab === "dashboard" && filters.status) params.set("status", filters.status);
   if (tab === "saved")     params.set("is_saved", "true");
@@ -130,7 +136,7 @@ export default function App() {
       .catch(() => {});
   }
 
-  const visibleJobs = applyDeadlineFilter(jobs, filters.deadline_filter);
+  const visibleJobs = applyRoleTypeFilter(applyDeadlineFilter(jobs, filters.deadline_filter), filters.role_type);
 
   const NAV_TABS: { label: string; value: Tab }[] = [
     { label: "Dashboard", value: "dashboard" },
