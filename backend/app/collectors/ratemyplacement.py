@@ -66,6 +66,19 @@ def _map_role_type(job_type_name: str) -> str:
     return job_type_name
 
 
+_PLACEHOLDER_TITLE_PATTERNS = [
+    "register your interest",
+    "expression of interest",
+    "talent pool",
+    "register interest",
+]
+
+
+def is_placeholder_listing(title: str) -> bool:
+    lower = (title or "").lower()
+    return any(pattern in lower for pattern in _PLACEHOLDER_TITLE_PATTERNS)
+
+
 def _extract_jobs_from_page(html: str) -> tuple[list[dict], int]:
     """Returns (jobs_on_page, total_results)."""
     soup = BeautifulSoup(html, "html.parser")

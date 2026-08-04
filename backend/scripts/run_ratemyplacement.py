@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 import time
-from app.collectors.ratemyplacement import fetch_jobs, fetch_job_description, DETAIL_DELAY
+from app.collectors.ratemyplacement import fetch_jobs, fetch_job_description, is_placeholder_listing, DETAIL_DELAY
 from app.db.database import SessionLocal
 from app.models.job import Job
 from app.services.scoring import calculate_fit_score
@@ -34,6 +34,10 @@ def main() -> None:
         for i, job_data in enumerate(jobs, 1):
             try:
                 if db.query(Job).filter(Job.url == job_data["url"]).first():
+                    skipped += 1
+                    continue
+
+                if is_placeholder_listing(job_data["title"]):
                     skipped += 1
                     continue
 
