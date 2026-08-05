@@ -61,6 +61,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddJob, setShowAddJob] = useState(false);
+  const [showFiltersMobile, setShowFiltersMobile] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -159,8 +160,8 @@ export default function App() {
           <span className="text-sm font-bold text-slate-900 tracking-tight">Internship Radar</span>
         </div>
 
-        {/* nav links */}
-        <nav className="flex items-center gap-1">
+        {/* nav links — desktop only, mobile uses the bottom tab bar */}
+        <nav className="hidden lg:flex items-center gap-1">
           {NAV_TABS.map(({ label, value }) => {
             const active = value === activeTab;
             return (
@@ -202,21 +203,38 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* Sidebar — 280px */}
-            <div className="w-[280px] shrink-0 h-full">
+            {/* Sidebar — 280px on desktop, mobile drawer otherwise */}
+            <div className="hidden lg:block w-[280px] shrink-0 h-full">
               <FilterBar filters={filters} onChange={setFilters} />
             </div>
 
-            {/* Job list — 400px */}
-            <div className="w-[400px] shrink-0 flex flex-col bg-[#f9f9ff] border-x border-slate-200">
+            {showFiltersMobile && (
+              <div
+                onClick={(e) => { if (e.target === e.currentTarget) setShowFiltersMobile(false); }}
+                className="lg:hidden fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
+              >
+                <div className="h-full w-[85%] max-w-[320px] bg-white shadow-2xl">
+                  <FilterBar filters={filters} onChange={setFilters} onClose={() => setShowFiltersMobile(false)} />
+                </div>
+              </div>
+            )}
+
+            {/* Job list — 400px on desktop, full width on mobile; hidden on mobile once a job is selected */}
+            <div className={`w-full lg:w-[400px] shrink-0 flex-col bg-[#f9f9ff] lg:border-x border-slate-200 ${selectedJob ? "hidden lg:flex" : "flex"}`}>
 
               {/* column header */}
               <div className="shrink-0 bg-white border-b border-slate-200 px-5 pt-4 pb-3.5">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h1 className="text-sm font-bold text-slate-900">
                     {loading ? "Loading…" : `${visibleJobs.length} ${activeTab === "saved" ? "Saved" : "Roles found"}`}
                   </h1>
-                  <span className="text-[11px] text-slate-400 font-medium">Sorted by fit score</span>
+                  <button
+                    onClick={() => setShowFiltersMobile(true)}
+                    className="lg:hidden shrink-0 text-xs font-semibold text-slate-500 px-2.5 h-7 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    Filters
+                  </button>
+                  <span className="hidden lg:inline text-[11px] text-slate-400 font-medium">Sorted by fit score</span>
                 </div>
 
                 <div className="relative mt-2.5">
@@ -252,9 +270,14 @@ export default function App() {
               </div>
             </div>
 
-            {/* Job detail — fills rest */}
-            <div className="flex-1 overflow-hidden">
-              <JobDetail job={selectedJob} onToggleSaved={toggleSaved} onUpdateStatus={updateStatus} />
+            {/* Job detail — fills rest on desktop, full width on mobile once a job is selected */}
+            <div className={`w-full lg:flex-1 overflow-hidden ${selectedJob ? "block" : "hidden lg:block"}`}>
+              <JobDetail
+                job={selectedJob}
+                onToggleSaved={toggleSaved}
+                onUpdateStatus={updateStatus}
+                onBack={() => setSelectedJob(null)}
+              />
             </div>
           </>
         )}
@@ -262,7 +285,7 @@ export default function App() {
       </div>
 
       {/* ── Footer ── */}
-      <footer className="shrink-0 h-7 bg-white border-t border-slate-200 flex items-center justify-center">
+      <footer className="shrink-0 h-7 bg-white border-t border-slate-200 items-center justify-center hidden lg:flex">
         <a
           href="https://logo.dev"
           target="_blank"
@@ -272,6 +295,24 @@ export default function App() {
           Logos by Logo.dev
         </a>
       </footer>
+
+      {/* ── Bottom tab bar — mobile only ── */}
+      <nav className="lg:hidden shrink-0 h-14 bg-white border-t border-slate-200 flex items-stretch">
+        {NAV_TABS.map(({ label, value }) => {
+          const active = value === activeTab;
+          return (
+            <button
+              key={label}
+              onClick={() => { setActiveTab(value); setSelectedJob(null); }}
+              className={`flex-1 text-sm font-medium transition-colors ${
+                active ? "text-[#003fa3] font-semibold" : "text-slate-500"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </nav>
 
       {showAddJob && (
         <AddJobModal

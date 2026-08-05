@@ -6,6 +6,7 @@ interface Props {
   job: Job | null;
   onToggleSaved: (job: Job) => void;
   onUpdateStatus: (job: Job, status: string) => void;
+  onBack?: () => void;
 }
 
 const ICON_COLORS = [
@@ -167,7 +168,7 @@ function EmptyState() {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function JobDetail({ job, onToggleSaved, onUpdateStatus }: Props) {
+export default function JobDetail({ job, onToggleSaved, onUpdateStatus, onBack }: Props) {
   const [showFullDesc, setShowFullDesc] = useState(false);
 
   if (!job) return <EmptyState />;
@@ -177,14 +178,26 @@ export default function JobDetail({ job, onToggleSaved, onUpdateStatus }: Props)
 
   return (
     <div className="h-full overflow-y-auto bg-slate-50">
-      <div className="max-w-4xl mx-auto p-8">
+      <div className="max-w-4xl mx-auto p-4 md:p-8">
+
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="lg:hidden mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-600"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+            </svg>
+            Back to list
+          </button>
+        )}
 
         {/* ── Summary card ── */}
         <div className="rounded-2xl border border-slate-200 shadow-sm bg-white overflow-hidden">
-          <div className="p-8">
+          <div className="p-5 md:p-8">
 
             {/* hero row */}
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 flex-wrap">
               <CompanyLogo company={job.company} size={56} rounded="rounded-2xl" textSize="text-xl" />
 
               <div className="flex-1 min-w-0">
@@ -199,7 +212,7 @@ export default function JobDetail({ job, onToggleSaved, onUpdateStatus }: Props)
               </div>
 
               {/* action buttons */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => onToggleSaved(job)}
                   className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-colors ${
@@ -242,7 +255,7 @@ export default function JobDetail({ job, onToggleSaved, onUpdateStatus }: Props)
             </div>
 
             {/* metadata grid */}
-            <dl className="mt-6 pt-6 border-t border-slate-100 grid grid-cols-4 gap-6">
+            <dl className="mt-6 pt-6 border-t border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-6">
               <div className="flex flex-col gap-0.5">
                 <dt className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Fit Score</dt>
                 <dd className={`text-sm font-semibold ${scoreColor(job.fit_score)}`}>{job.fit_score} / 100</dd>
@@ -264,7 +277,7 @@ export default function JobDetail({ job, onToggleSaved, onUpdateStatus }: Props)
         </div>
 
         {/* ── Content row ── */}
-        <div className="mt-5 flex items-start gap-5">
+        <div className="mt-5 flex flex-col md:flex-row items-start gap-5">
 
           {/* ── Left: description sections ── */}
           <div className="flex-1 min-w-0 flex flex-col gap-4">
@@ -285,7 +298,7 @@ export default function JobDetail({ job, onToggleSaved, onUpdateStatus }: Props)
             {/* Key Details */}
             <div className="rounded-2xl border border-slate-200 shadow-sm bg-white p-6">
               <h3 className="text-sm font-bold text-slate-900 mb-3">Key Details</h3>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <DetailChip
                   label="Company"
                   value={job.company}
@@ -346,7 +359,7 @@ export default function JobDetail({ job, onToggleSaved, onUpdateStatus }: Props)
           </div>
 
           {/* ── Right: company card ── */}
-          <div className="w-[185px] shrink-0 rounded-2xl border border-slate-200 shadow-sm bg-white overflow-hidden">
+          <div className="w-full md:w-[185px] md:shrink-0 rounded-2xl border border-slate-200 shadow-sm bg-white overflow-hidden">
             <div className={`h-28 flex items-end p-3 ${bg}`}>
               <span className="text-5xl font-black text-white/20 select-none leading-none">
                 {job.company.charAt(0)}

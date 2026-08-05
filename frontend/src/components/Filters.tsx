@@ -3,6 +3,7 @@ import { Filters } from "../types";
 interface Props {
   filters: Filters;
   onChange: (filters: Filters) => void;
+  onClose?: () => void;
 }
 
 const EMPTY: Filters = {
@@ -45,7 +46,7 @@ const inputCls =
   "h-9 w-full px-3 text-sm bg-white border border-slate-200 rounded-lg text-slate-800 " +
   "placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all";
 
-export default function FilterBar({ filters, onChange }: Props) {
+export default function FilterBar({ filters, onChange, onClose }: Props) {
   function set(field: keyof Filters, value: string) {
     onChange({ ...filters, [field]: value });
   }
@@ -65,14 +66,26 @@ export default function FilterBar({ filters, onChange }: Props) {
       {/* header — aligns with job-list header height */}
       <div className="shrink-0 px-6 h-[73px] flex items-center justify-between border-b border-slate-100">
         <span className="text-sm font-bold text-slate-900">Filters</span>
-        {hasFilters && (
-          <button
-            onClick={() => onChange(EMPTY)}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-700 uppercase tracking-wide"
-          >
-            Clear all
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {hasFilters && (
+            <button
+              onClick={() => onChange(EMPTY)}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 uppercase tracking-wide"
+            >
+              Clear all
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="lg:hidden p-1 text-slate-400 hover:text-slate-600"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* scrollable body */}
