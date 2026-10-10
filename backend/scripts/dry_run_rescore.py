@@ -1,17 +1,22 @@
 """
-Dry run: compare stored fit scores with the current matcher, without writing anything.
+Dry run: compare stored fit scores with rescoring options, without writing anything.
 
 Runs inside a READ ONLY transaction, so the database refuses any write.
-Three scores are compared per listing:
-  stored  – fit_score currently in the database
-  legacy  – today's rules with the previous substring matcher (isolates the matcher change)
-  new     – today's rules with the current matcher (what recalculate_scores.py would write)
+Scores compared per listing:
+  A  stored     – fit_score currently in the database
+  B  --b-rules  – an earlier scoring.py (default: git:0b27100, the matcher fix)
+  C  --c-rules  – optional second earlier scoring.py (a git:<rev> or a file path)
+  D  current    – app/services/scoring.py as it is now (what recalculate_scores.py would write)
 
 Run from the backend/ directory:
-    python scripts/dry_run_rescore.py [--out report.md] [--examples 12]
+    python scripts/dry_run_rescore.py [--c-rules path/to/scoring.py] [--out report.md]
 """
 import argparse
+import importlib.util
+import re
+import subprocess
 import sys
+import types
 from collections import Counter
 from pathlib import Path
 
@@ -24,55 +29,74 @@ from sqlalchemy import text
 
 from app.collectors.ratemyplacement import is_placeholder_listing
 from app.db.database import engine
-from app.services.scoring import FitExplanation, explain_fit_score
+from app.services import scoring as current
 
 RULE_LABEL = {
     "role": "Role type", "tech": "Tech keywords", "location": "Location",
     "requirements": "States requirements", "stack": "Modern stack",
-    "graduate": "Graduate-scheme wording", "unpaid": "Unpaid/volunteer", "off_target": "Off-target department",
+    "graduate": "Graduate", "unpaid": "Unpaid/volunteer", "off_target": "Off-target",
+}
+BUCKETS = ["-100 to -41", "-40 to -21", "-20 to -11", "-10 to -1", "0", "+1 to +10", "+11 to +20", "+21 to +40", "+41 to +100"]
+GROUPS = {  # report grouping only; whole-word patterns
+    "Software engineering": r"\b(?:software|developer|programm\w*)\b",
+    "AI / data": r"\b(?:AI|data|machine learning|natural language|analytics)\b",
+    "Cyber": r"\bcyber\b",
+    "Business development / presales / sales": r"\b(?:business development|presales|sales|key accounts?)\b",
+    "Audit / tax / actuarial": r"\b(?:audit|tax|actuar\w*)\b",
 }
 
 
-def legacy_find(text_value: str | None, term: str) -> str | None:
-    """The previous matcher: plain substring search on lowercased text."""
-    lowered = (text_value or "").lower()
-    i = lowered.find(term)
-    if i < 0:
-        return None
-    a, b = i, i + len(term)
-    while a > 0 and lowered[a - 1].isalnum():
-        a -= 1
-    while b < len(lowered) and lowered[b].isalnum():
-        b += 1
-    return lowered[a:b].strip() or term.strip()
+def load_rules(spec: str) -> types.ModuleType:
+    """scoring.py from `git:<rev>` or from a file path, imported without touching the working tree."""
+    name = f"scoring_{re.sub(r'[^A-Za-z0-9]', '_', spec)}"
+    if spec.startswith("git:"):
+        repo = Path(__file__).resolve().parents[2]
+        source = subprocess.run(["git", "show", f"{spec[4:]}:backend/app/services/scoring.py"],
+                                cwd=repo, check=True, capture_output=True, text=True).stdout
+        module = types.ModuleType(name)
+        sys.modules[name] = module  # dataclasses resolve annotations through sys.modules
+        exec(compile(source, spec, "exec"), module.__dict__)
+        return module
+    loader_spec = importlib.util.spec_from_file_location(name, spec)
+    module = importlib.util.module_from_spec(loader_spec)
+    sys.modules[name] = module
+    loader_spec.loader.exec_module(module)
+    return module
 
 
-def evidence(e: FitExplanation, key: str) -> str:
-    r = next(r for r in e.rules if r.key == key)
+def rule(e, key):
+    return next(r for r in e.rules if r.key == key)
+
+
+def evidence(e, key: str) -> str:
+    r = rule(e, key)
     if not r.evidence:
         return "—"
     return ", ".join(t if m.lower() == t else f"{t} in “{m}”" for t, m in r.evidence)
 
 
-def points(e: FitExplanation, key: str) -> int:
-    return next(r.points for r in e.rules if r.key == key)
-
-
 def bucket(d: int) -> str:
     if d == 0:
         return "0"
-    edges = [(-100, -41), (-40, -21), (-20, -11), (-10, -1), (1, 10), (11, 20), (21, 40), (41, 100)]
-    for lo, hi in edges:
+    for lo, hi in [(-100, -41), (-40, -21), (-20, -11), (-10, -1), (1, 10), (11, 20), (21, 40), (41, 100)]:
         if lo <= d <= hi:
             return f"{lo:+d} to {hi:+d}"
     return str(d)
 
 
+def contributions(e) -> str:
+    return " ".join(f"{k}{r.points:+d}" for k in RULE_LABEL if (r := rule(e, k)).points)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--b-rules", default="git:0b27100")
+    ap.add_argument("--c-rules", help="git:<rev> or path; defaults to the B rules")
     ap.add_argument("--out", help="also write the report to this file")
-    ap.add_argument("--examples", type=int, default=12)
+    ap.add_argument("--top", type=int, default=15)
     args = ap.parse_args()
+    b_rules = load_rules(args.b_rules)
+    c_rules = load_rules(args.c_rules) if args.c_rules else b_rules
 
     with engine.connect() as conn:
         conn.execute(text("SET TRANSACTION READ ONLY"))
@@ -84,77 +108,79 @@ def main() -> None:
     records = []
     for r in rows:
         job = dict(r)
-        legacy = explain_fit_score(job, find=legacy_find)
-        new = explain_fit_score(job)
-        changed_rules = [k for k in RULE_LABEL if points(legacy, k) != points(new, k)]
+        b, c, d = b_rules.explain_fit_score(job), c_rules.explain_fit_score(job), current.explain_fit_score(job)
         records.append({
             "id": r["id"], "title": r["title"], "company": r["company"],
             "placeholder": is_placeholder_listing(r["title"]),
-            "stored": r["fit_score"], "legacy": legacy.score, "new": new.score,
-            "legacy_e": legacy, "new_e": new, "changed_rules": changed_rules,
+            "A": r["fit_score"], "B": b.score, "C": c.score, "D": d.score,
+            "Be": b, "Ce": c, "De": d, "category": d.category,
+            "changed": [k for k in RULE_LABEL if rule(c, k).points != rule(d, k).points],
         })
 
     out: list[str] = []
     p = out.append
     n = len(records)
+    real = [x for x in records if not x["placeholder"]]
 
-    def summary(label: str, before_key: str) -> None:
-        deltas = [x["new"] - x[before_key] for x in records]
+    def summary(label: str, before: str, after: str) -> None:
+        deltas = [x[after] - x[before] for x in records]
         changed = [d for d in deltas if d]
-        p(f"### {label}\n")
-        p(f"- Listings examined: **{n}** ({sum(x['placeholder'] for x in records)} are placeholder listings)")
-        p(f"- Scores that would change: **{len(changed)}** ({len(changed) / n:.0%})")
-        p(f"- Increases: {sum(d > 0 for d in changed)} · decreases: {sum(d < 0 for d in changed)}")
-        p(f"- Average absolute delta (all listings): **{sum(map(abs, deltas)) / n:.1f}** points"
-          f"; among changed: {sum(map(abs, changed)) / max(1, len(changed)):.1f}")
         dist = Counter(bucket(d) for d in deltas)
-        order = ["-100 to -41", "-40 to -21", "-20 to -11", "-10 to -1", "0", "+1 to +10", "+11 to +20", "+21 to +40", "+41 to +100"]
-        p("\n| Delta | Listings |\n|---|---|")
-        for k in order:
-            if dist.get(k):
-                p(f"| {k} | {dist[k]} |")
+        p(f"- **{label}**: {len(changed)} changed ({len(changed) / n:.0%}) · up {sum(d > 0 for d in changed)}"
+          f" · down {sum(d < 0 for d in changed)} · avg |Δ| {sum(map(abs, deltas)) / n:.1f}"
+          f" ({sum(map(abs, changed)) / max(1, len(changed)):.1f} among changed) · "
+          + ", ".join(f"{k}: {dist[k]}" for k in BUCKETS if dist.get(k)))
+
+    def table(rows_: list[dict], cols: str = "full") -> None:
+        p("| id | Role | Company | Category | A | B | C | D | Final contributions |\n|---|---|---|---|---|---|---|---|---|")
+        for x in rows_:
+            p(f"| {x['id']} | {x['title'][:62]} | {x['company']} | {x['category']} | {x['A']} | {x['B']} | {x['C']} | **{x['D']}** | {contributions(x['De'])} |")
         p("")
 
     p("# Fit score dry run\n")
-    p("No rows were written: the queries ran in a READ ONLY transaction that was rolled back.\n")
-    summary("Stored score → new matcher (what a rescore would write)", "stored")
-    summary("Old substring matcher → new matcher (the matcher change on its own)", "legacy")
-
-    p("### Rules whose points change (old matcher → new)\n")
-    p("| Rule | Listings changed | Up | Down |\n|---|---|---|---|")
-    for k, label in RULE_LABEL.items():
-        moved = [points(x["new_e"], k) - points(x["legacy_e"], k) for x in records if k in x["changed_rules"]]
-        if moved:
-            p(f"| {label} | {len(moved)} | {sum(m > 0 for m in moved)} | {sum(m < 0 for m in moved)} |")
+    p("No rows were written: the queries ran in a READ ONLY transaction that was rolled back.  ")
+    p(f"A stored · B {args.b_rules} · C {args.c_rules or args.b_rules} · D current working tree. "
+      f"{n} listings, {len(real)} real (excluding {n - len(real)} placeholders).\n")
+    p("Final categories: " + ", ".join(f"{k} {v}" for k, v in Counter(x["category"] for x in records).most_common()) + "\n")
+    p("## Summary\n")
+    summary("C → D (this pass)", "C", "D")
+    summary("B → C", "B", "C")
+    summary("A → D (what a rescore would write)", "A", "D")
     p("")
 
-    def table(title: str, rows_: list[dict]) -> None:
-        p(f"### {title}\n")
-        p("| # | Role | Company | Stored | Old matcher | New | Δ vs stored | Δ from matcher | Rules changed |\n|---|---|---|---|---|---|---|---|---|")
-        for x in rows_:
-            rules = ", ".join(RULE_LABEL[k] for k in x["changed_rules"]) or "— (stored score was stale)"
-            p(f"| {x['id']} | {x['title'][:60]} | {x['company']} | {x['stored']} | {x['legacy']} | {x['new']} | "
-              f"{x['new'] - x['stored']:+d} | {x['new'] - x['legacy']:+d} | {rules} |")
-        p("")
+    p("## Rules responsible for C → D\n")
+    p("| Rule | Non-zero in C | Non-zero in D | Changed C→D | Up | Down |\n|---|---|---|---|---|---|")
+    for k, label in RULE_LABEL.items():
+        moved = [rule(x["De"], k).points - rule(x["Ce"], k).points for x in records if k in x["changed"]]
+        p(f"| {label} | {sum(rule(x['Ce'], k).points != 0 for x in records)} | {sum(rule(x['De'], k).points != 0 for x in records)} "
+          f"| {len(moved)} | {sum(m > 0 for m in moved)} | {sum(m < 0 for m in moved)} |")
+    p("")
 
-    by_delta = sorted(records, key=lambda x: x["new"] - x["stored"])
-    table("Largest decreases (stored → new)", by_delta[:10])
-    table("Largest increases (stored → new)", list(reversed(by_delta[-10:])))
+    moved = sorted([x for x in records if x["changed"]], key=lambda x: (x["D"] - x["C"], x["id"]))
+    p(f"## Every listing changed C → D ({len(moved)})\n")
+    p("| id | Role | C → D | Rule | C evidence | D evidence |\n|---|---|---|---|---|---|")
+    for x in moved:
+        for k in x["changed"]:
+            p(f"| {x['id']} | {x['title'][:58]} | {x['C']} → {x['D']} | {RULE_LABEL[k]} {rule(x['Ce'], k).points:+d} → {rule(x['De'], k).points:+d} "
+              f"| {evidence(x['Ce'], k)} | {evidence(x['De'], k)} |")
+    p("")
 
-    # Examples: prefer listings where the matcher itself moved the score, then several rules, then size.
-    matcher_moved = [x for x in records if x["changed_rules"]]
-    matcher_moved.sort(key=lambda x: (-len(x["changed_rules"]), -abs(x["new"] - x["legacy"])))
-    p(f"### Before / after examples ({min(args.examples, len(matcher_moved))} of {len(matcher_moved)} listings where at least one rule changed;"
-      f" some net to zero after clamping)\n")
-    for x in matcher_moved[: args.examples]:
-        p(f"**{x['title']}** · {x['company']} (id {x['id']})  ")
-        p(f"Stored {x['stored']} · old matcher {x['legacy']} → new {x['new']} "
-          f"(Δ {x['new'] - x['legacy']:+d} from matcher, {x['new'] - x['stored']:+d} vs stored)\n")
-        p("| Rule | Old points | Old evidence | New points | New evidence |\n|---|---|---|---|---|")
-        for k in x["changed_rules"]:
-            p(f"| {RULE_LABEL[k]} | {points(x['legacy_e'], k):+d} | {evidence(x['legacy_e'], k)} | "
-              f"{points(x['new_e'], k):+d} | {evidence(x['new_e'], k)} |")
-        p("")
+    by = sorted(records, key=lambda x: (x["D"] - x["A"], x["id"]))
+    p(f"## Top {args.top} decreases, stored → final\n")
+    table(by[: args.top])
+    p(f"## Top {args.top} increases, stored → final\n")
+    table(list(reversed(by[-args.top:])))
+
+    ranked = sorted(real, key=lambda x: (-x["D"], x["id"]))
+    p("## Top 20 real listings by final score\n")
+    table(ranked[:20])
+    p("## Bottom 20 real listings by final score\n")
+    table(ranked[-20:])
+
+    for label, pattern in GROUPS.items():
+        group = [x for x in ranked if re.search(pattern, x["title"], re.IGNORECASE)]
+        p(f"## {label} ({len(group)} real listings)\n")
+        table(group)
 
     report = "\n".join(out)
     print(report)
