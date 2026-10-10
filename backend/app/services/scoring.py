@@ -74,6 +74,19 @@ _REQUIREMENT_TERMS = ["requirements", "skills", "experience"]
 _GRADUATE_ONLY_TERMS = ["graduate only"]
 _UNPAID_TERMS = ["unpaid", "volunteer"]
 
+# Points. Gains are what a rule adds when it matches (tech adds per keyword, up
+# to its cap); penalties are what a rule subtracts.
+ROLE_POINTS = 30
+TECH_POINTS_EACH = 5
+TECH_POINTS_MAX = 30
+LOCATION_PRIMARY_POINTS = 20
+LOCATION_SECONDARY_POINTS = 10
+REQUIREMENTS_POINTS = 10
+STACK_POINTS = 10
+GRADUATE_PENALTY = -40
+UNPAID_PENALTY = -50
+OFF_TARGET_PENALTY = -30
+
 # Role categories, in precedence order. Placements and internships are the
 # product's target (undergraduate work experience) and earn the role bonus.
 # Graduate roles are penalised. Apprenticeships are recognised deliberately but
@@ -119,13 +132,30 @@ def _term_patterns(term: str) -> tuple[re.Pattern[str], re.Pattern[str] | None]:
     return whole, acronym
 
 
-def find_term(text: str | None, term: str) -> str | None:
-    """Return the text that matched `term` in `text`, or None. See module docstring."""
+def _search(text: str | None, term: str) -> re.Match[str] | None:
     if not text:
         return None
     whole, acronym = _term_patterns(term)
-    match = whole.search(text) or (acronym.search(text) if acronym else None)
+    return whole.search(text) or (acronym.search(text) if acronym else None)
+
+
+def find_term(text: str | None, term: str) -> str | None:
+    """Return the text that matched `term` in `text`, or None. See module docstring."""
+    match = _search(text, term)
     return match.group(0) if match else None
+
+
+def _word_around(text: str, term: str) -> str:
+    """The whole word the first match of `term` sits in: "rest" → "RESTful", "api" → "FastAPI"."""
+    match = _search(text, term)
+    if match is None:
+        return term
+    start, end = match.span()
+    while start > 0 and text[start - 1].isalnum():
+        start -= 1
+    while end < len(text) and text[end].isalnum():
+        end += 1
+    return text[start:end]
 
 
 def matches_term(text: str | None, term: str) -> bool:
@@ -250,6 +280,7 @@ class RuleResult:
     key: str
     points: int
     evidence: tuple[tuple[str, str], ...]  # (configured term, matched text)
+    words: tuple[str, ...] = ()  # for display: the word or phrase each match sits in, same order as evidence
 
 
 @dataclass(frozen=True)
@@ -270,8 +301,11 @@ def _concept(term: str, terms: list[str]) -> str:
     return t
 
 
-def _hits(text: str, terms: list[str], find: Finder) -> tuple[tuple[str, str], ...]:
-    """Matched (term, text) pairs, one per concept."""
+Hit = tuple[str, str, str]  # (configured term, matched text, word it sits in)
+
+
+def _hits(text: str, terms: list[str], find: Finder) -> tuple[Hit, ...]:
+    """Matched terms, one per concept."""
     found, seen = [], set()
     for term in terms:
         concept = _concept(term, terms)
@@ -280,8 +314,12 @@ def _hits(text: str, terms: list[str], find: Finder) -> tuple[tuple[str, str], .
         matched = find(text, term)
         if matched is not None:
             seen.add(concept)
-            found.append((term.strip(), matched))
+            found.append((term.strip(), matched, _word_around(text, term) if find is find_term else matched))
     return tuple(found)
+
+
+def _rule(key: str, points: int, hits: tuple[Hit, ...]) -> RuleResult:
+    return RuleResult(key, points, tuple((t, m) for t, m, _ in hits), tuple(w for _, _, w in hits))
 
 
 def explain_fit_score(job: dict, *, find: Finder = find_term) -> FitExplanation:
@@ -299,14 +337,14 @@ def explain_fit_score(job: dict, *, find: Finder = find_term) -> FitExplanation:
     role_text = f"{role_part} · {role_type}"
 
     category, category_text = classify_role(title, role_type, role_text=role_part)
-    role = ((category, category_text),) if category in _TARGET_CATEGORIES and category_text else ()
+    role = ((category, category_text, category_text),) if category in _TARGET_CATEGORIES and category_text else ()
     tech = _hits(title_desc, _TECH_KEYWORDS, find)
     primary = _hits(location, _LOCATION_PRIMARY_TERMS, find)
     secondary = () if primary else _hits(location, _LOCATION_SECONDARY_TERMS, find)
     requirements = _hits(description, _REQUIREMENT_TERMS, find)
     stack = _hits(description, _QUALITY_STACK_KEYWORDS, find)
     graduate = (
-        (("graduate", category_text or "graduate"),) if category == "graduate"
+        (("graduate", category_text or "graduate", category_text or "graduate"),) if category == "graduate"
         else _hits(description, _GRADUATE_ONLY_TERMS, find)
     )
     unpaid = _hits(role_text, _UNPAID_TERMS, find) or _hits(description, _UNPAID_TERMS, find_term_describing_role)
@@ -314,14 +352,15 @@ def explain_fit_score(job: dict, *, find: Finder = find_term) -> FitExplanation:
     irrelevant = () if technical else _hits(role_text, _IRRELEVANT_KEYWORDS, find)
 
     rules = (
-        RuleResult("role", 30 if role else 0, role),
-        RuleResult("tech", min(len(tech) * 5, 30), tech),
-        RuleResult("location", 20 if primary else 10 if secondary else 0, primary or secondary),
-        RuleResult("requirements", 10 if requirements else 0, requirements),
-        RuleResult("stack", 10 if stack else 0, stack),
-        RuleResult("graduate", -40 if graduate else 0, graduate),
-        RuleResult("unpaid", -50 if unpaid else 0, unpaid),
-        RuleResult("off_target", -30 if irrelevant else 0, irrelevant),
+        _rule("role", ROLE_POINTS if role else 0, role),
+        _rule("tech", min(len(tech) * TECH_POINTS_EACH, TECH_POINTS_MAX), tech),
+        _rule("location", LOCATION_PRIMARY_POINTS if primary else LOCATION_SECONDARY_POINTS if secondary else 0,
+              primary or secondary),
+        _rule("requirements", REQUIREMENTS_POINTS if requirements else 0, requirements),
+        _rule("stack", STACK_POINTS if stack else 0, stack),
+        _rule("graduate", GRADUATE_PENALTY if graduate else 0, graduate),
+        _rule("unpaid", UNPAID_PENALTY if unpaid else 0, unpaid),
+        _rule("off_target", OFF_TARGET_PENALTY if irrelevant else 0, irrelevant),
     )
     raw = sum(r.points for r in rules)
     return FitExplanation(score=max(0, min(100, raw)), raw=raw, category=category, rules=rules)
