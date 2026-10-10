@@ -1,0 +1,165 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Direction typefaces ─────────────────────────────────────────────────── */
+.font-refined   { font-family: "Inter", system-ui, sans-serif; font-feature-settings: "cv11", "ss03"; }
+.font-ed-sans   { font-family: "Instrument Sans", system-ui, sans-serif; }
+.font-ed-serif  { font-family: "Newsreader", Georgia, serif; font-optical-sizing: auto; }
+.font-radar     { font-family: "Geist", system-ui, sans-serif; }
+.font-radar-mono{ font-family: "Geist Mono", ui-monospace, monospace; }
+
+body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* Browser surfaces themed for the Radar direction. */
+.radar-root ::selection { background: rgb(43 85 214 / 0.16); }
+.radar-root input { caret-color: #2B55D6; }
+
+/* A scroll area whose edge must stay flush with a neighbouring pane. */
+.proto-noscrollbar { scrollbar-width: none; }
+.proto-noscrollbar::-webkit-scrollbar { display: none; }
+
+::-webkit-scrollbar        { width: 8px; height: 8px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: rgb(0 0 0 / 0.12); border-radius: 99px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgb(0 0 0 / 0.22); }
+
+/* ── Shared motion (emil-design-eng / better-ui values) ──────────────────── */
+
+/* Popovers scale in from their trigger, ease-out, under 200ms. */
+.proto-pop {
+  transform-origin: top left;
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.proto-pop[data-align="end"] { transform-origin: top right; }
+@starting-style {
+  .proto-pop { opacity: 0; transform: scale(0.97) translateY(-2px); }
+}
+
+/* Toasts rise a few px; transitions (not keyframes) so rapid toasts retarget. */
+.proto-toast { transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1), transform 220ms cubic-bezier(0.23, 1, 0.32, 1); }
+@starting-style {
+  .proto-toast { opacity: 0; transform: translateY(8px); }
+}
+
+/* Disclosures (score explanation) fade content in; height change is instant. */
+.proto-reveal { transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1), transform 180ms cubic-bezier(0.23, 1, 0.32, 1); }
+@starting-style {
+  .proto-reveal { opacity: 0; transform: translateY(-4px); }
+}
+
+/* Press feedback. */
+.proto-press { transition-property: transform, background-color, color, border-color, box-shadow; transition-duration: 160ms; transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+.proto-press:active { transform: scale(0.96); }
+
+/* Icon swap: scale .25→1, opacity 0→1, blur 4px→0 (better-ui). */
+.proto-icon-swap { display: inline-grid; }
+.proto-icon-swap > * { grid-area: 1 / 1; transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1), transform 200ms cubic-bezier(0.2, 0, 0, 1), filter 200ms cubic-bezier(0.2, 0, 0, 1); }
+.proto-icon-swap > [data-off] { opacity: 0; transform: scale(0.25); filter: blur(4px); }
+
+/* A changed row briefly takes a tint so the eye can find where it went. */
+@keyframes proto-flash { from { background-color: var(--flash, rgb(59 130 246 / 0.12)); } }
+.proto-flash { animation: proto-flash 900ms cubic-bezier(0.23, 1, 0.32, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .proto-pop, .proto-toast, .proto-reveal { transition-property: opacity; }
+  .proto-press:active { transform: none; }
+  .proto-icon-swap > [data-off] { transform: none; filter: none; }
+}
+
+/* ── Prototype picker (verbatim from the prototype skill's PICKER.md) ────── */
+.proto-picker {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(10, 10, 10, 0.82);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 8px 24px rgba(0, 0, 0, 0.24),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.proto-picker-highlight {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  will-change: transform;
+}
+
+/* The slide is enabled only after first paint (data-ready), so load doesn't animate. */
+.proto-picker[data-ready] .proto-picker-highlight {
+  transition:
+    transform 250ms cubic-bezier(0.23, 1, 0.32, 1),
+    width 250ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proto-picker[data-ready] .proto-picker-highlight { transition: none; }
+}
+
+.proto-picker-item {
+  position: relative; /* sits above the highlight */
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font: inherit;
+  cursor: pointer;
+  transition: color 150ms ease-out;
+}
+
+.proto-picker-item:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.proto-picker-item:active {
+  transform: scale(0.97);
+}
+
+.proto-picker-item:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: 2px;
+}
+
+.proto-picker-item[data-active] {
+  color: #fff;
+}
+
+.proto-picker-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.proto-picker-replay {
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.proto-picker[data-position="top"] {
+  bottom: auto;
+  top: 24px;
+}
