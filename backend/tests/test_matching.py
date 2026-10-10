@@ -192,8 +192,10 @@ def test_interest_no_longer_earns_modern_stack_points():
     assert rule(e, "stack").points == 0
 
 
-def test_presales_no_longer_triggers_off_target_penalty():
-    assert calculate_fit_score(job(title="Presales Placement")) == 30
+def test_presales_is_not_matched_through_sales():
+    # "presales" is now an off-target term in its own right; "sales" must not match inside it.
+    e = explain_fit_score(job(title="Presales Placement"))
+    assert rule(e, "off_target").evidence == (("presales", "Presales"),)
 
 
 def test_javascript_counts_once_not_as_java_too():
