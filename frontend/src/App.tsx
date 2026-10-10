@@ -1,329 +1,123 @@
-import { useEffect, useRef, useState } from "react";
-import { Filters, Job } from "./types";
-import FilterBar from "./components/Filters";
-import JobList from "./components/JobList";
-import JobDetail from "./components/JobDetail";
-import AppliedDashboard from "./components/AppliedDashboard";
-import AddJobModal from "./components/AddJobModal";
+import { useState } from "react";
+import { StoreProvider, useStore, View } from "./store";
+import { RadarMark } from "./ui/marks";
+import { Icon, Toaster } from "./ui/primitives";
+import { btnSecondary, focusRing } from "./ui/styles";
+import { AddRoleDialog } from "./views/AddRoleDialog";
+import { PipelineView } from "./views/PipelineView";
+import { RadarView } from "./views/RadarView";
+import { ShortlistView } from "./views/ShortlistView";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-const DEBOUNCE_MS = 300;
-
-const EMPTY_FILTERS: Filters = {
-  search: "", min_score: "", status: "", location: "", source: "", role_type: [], deadline_filter: "",
-};
-
-function applyDeadlineFilter(jobs: Job[], filter: string): Job[] {
-  if (!filter) return jobs;
-  if (filter === "none") return jobs.filter((j) => !j.deadline);
-  const days = parseInt(filter, 10);
-  if (isNaN(days)) return jobs;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const cutoff = new Date(today);
-  cutoff.setDate(cutoff.getDate() + days);
-  return jobs.filter((j) => {
-    if (!j.deadline) return false;
-    const d = new Date(j.deadline);
-    return d >= today && d <= cutoff;
-  });
-}
-
-function applyRoleTypeFilter(jobs: Job[], roleTypes: string[]): Job[] {
-  if (roleTypes.length === 0) return jobs;
-  return jobs.filter((j) =>
-    roleTypes.some((rt) => j.role_type.toLowerCase().includes(rt.toLowerCase()))
+export default function App() {
+  return (
+    <StoreProvider>
+      <Shell />
+    </StoreProvider>
   );
 }
 
-type Tab = "dashboard" | "saved" | "applied";
-
-function buildQuery(filters: Filters, tab: Tab): string {
-  const params = new URLSearchParams();
-  if (filters.search)      params.set("search", filters.search);
-  if (filters.min_score)   params.set("min_score", filters.min_score);
-  if (filters.location)    params.set("location", filters.location);
-  if (filters.source)      params.set("source", filters.source);
-  // status filter from sidebar only applies on Dashboard tab
-  if (tab === "dashboard" && filters.status) params.set("status", filters.status);
-  if (tab === "saved")     params.set("is_saved", "true");
-  if (tab === "applied")   params.set("status", "applied");
-  params.set("limit", "200");
-  return params.toString();
-}
-
-export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showAddJob, setShowAddJob] = useState(false);
-  const [showFiltersMobile, setShowFiltersMobile] = useState(false);
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (activeTab === "applied") return; // AppliedDashboard manages its own data
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    debounceRef.current = setTimeout(() => {
-      const url = `${API}/jobs?${buildQuery(filters, activeTab)}`;
-      setLoading(true);
-      setError(null);
-
-      fetch(url)
-        .then(async (res) => {
-          if (!res.ok) {
-            const body = await res.text().catch(() => "");
-            throw new Error(`${res.status} ${res.statusText}${body ? ` — ${body}` : ""}`);
-          }
-          return res.json() as Promise<Job[]>;
-        })
-        .then((data) => {
-          setJobs(data);
-          setSelectedJob((prev) =>
-            prev ? (data.find((j) => j.id === prev.id) ?? data[0] ?? null) : (data[0] ?? null)
-          );
-          setLoading(false);
-        })
-        .catch((err: unknown) => {
-          setError(err instanceof Error ? err.message : "Unknown error");
-          setLoading(false);
-        });
-    }, DEBOUNCE_MS);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [filters, activeTab]);
-
-  function toggleSaved(job: Job) {
-    const next = !job.is_saved;
-    fetch(`${API}/jobs/${job.id}/saved`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_saved: next }),
-    })
-      .then((res) => res.json() as Promise<Job>)
-      .then((updated) => {
-        setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
-        setSelectedJob((prev) => (prev?.id === updated.id ? updated : prev));
-        // If we're on the Saved tab and just un-saved a job, remove it from the list
-        if (activeTab === "saved" && !updated.is_saved) {
-          setJobs((prev) => {
-            const next = prev.filter((j) => j.id !== updated.id);
-            setSelectedJob(next[0] ?? null);
-            return next;
-          });
-        }
-      })
-      .catch(() => {});
-  }
-
-  function updateStatus(job: Job, newStatus: string) {
-    fetch(`${API}/jobs/${job.id}/status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    })
-      .then((res) => res.json() as Promise<Job>)
-      .then((updated) => {
-        setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
-        setSelectedJob((prev) => (prev?.id === updated.id ? updated : prev));
-      })
-      .catch(() => {});
-  }
-
-  const visibleJobs = applyRoleTypeFilter(applyDeadlineFilter(jobs, filters.deadline_filter), filters.role_type);
-
-  const NAV_TABS: { label: string; value: Tab }[] = [
-    { label: "Dashboard", value: "dashboard" },
-    { label: "Saved",     value: "saved" },
-    { label: "Applied",   value: "applied" },
-  ];
+function Shell() {
+  const { view, load } = useStore();
+  const [adding, setAdding] = useState(false);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-[#f9f9ff]">
-
-      {/* ── Top nav ── 64px */}
-      <header className="shrink-0 h-16 bg-white border-b border-slate-200 flex items-center px-6 gap-8 z-10">
-        {/* brand */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-[#003fa3] flex items-center justify-center shrink-0">
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
-            </svg>
-          </div>
-          <span className="text-sm font-bold text-slate-900 tracking-tight">Internship Radar</span>
+    <div className="flex h-dvh flex-col bg-[#F4F5F7] text-[13.5px] text-[#0F1217]">
+      <header className="relative flex h-12 shrink-0 items-center border-b border-[#E3E6EA] bg-white px-4">
+        <div className="flex items-center gap-2">
+          <RadarMark />
+          <span className="text-[14px] font-semibold tracking-[-0.01em]">Internship Radar</span>
         </div>
-
-        {/* nav links — desktop only, mobile uses the bottom tab bar */}
-        <nav className="hidden lg:flex items-center gap-1">
-          {NAV_TABS.map(({ label, value }) => {
-            const active = value === activeTab;
-            return (
-              <button
-                key={label}
-                onClick={() => value && setActiveTab(value)}
-                className={`px-3 h-8 rounded-lg text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-slate-100 text-slate-900"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* spacer + right side */}
-        <div className="ml-auto flex items-center gap-3">
-          <button
-            onClick={() => setShowAddJob(true)}
-            className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 h-8 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-          >
-            + Add Job
+        <Tabs className="absolute left-1/2 hidden -translate-x-1/2 md:grid" />
+        <div className="ml-auto flex items-center gap-2.5">
+          <button onClick={() => setAdding(true)} disabled={load.state !== "ready"} className={`${btnSecondary} pl-2.5 max-sm:w-8 max-sm:justify-center max-sm:px-0`}>
+            <Icon name="plus" size={14} stroke={2} />
+            <span className="max-sm:sr-only">Add role</span>
           </button>
-          <div className="w-8 h-8 rounded-full bg-[#003fa3] flex items-center justify-center">
-            <span className="text-xs font-bold text-white select-none">H</span>
-          </div>
+          <span aria-hidden className="grid h-7 w-7 place-items-center rounded-full bg-[#0F1217] text-[11px] font-semibold text-white">H</span>
         </div>
       </header>
-
-      {/* ── Body ── fills remaining height */}
-      <div className="flex-1 flex overflow-hidden">
-
-        {activeTab === "applied" ? (
-          <div className="flex-1 overflow-y-auto bg-[#f9f9ff]">
-            <AppliedDashboard />
-          </div>
-        ) : (
-          <>
-            {/* Sidebar — 280px on desktop, mobile drawer otherwise */}
-            <div className="hidden lg:block w-[280px] shrink-0 h-full">
-              <FilterBar filters={filters} onChange={setFilters} />
-            </div>
-
-            {showFiltersMobile && (
-              <div
-                onClick={(e) => { if (e.target === e.currentTarget) setShowFiltersMobile(false); }}
-                className="lg:hidden fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"
-              >
-                <div className="h-full w-[85%] max-w-[320px] bg-white shadow-2xl">
-                  <FilterBar filters={filters} onChange={setFilters} onClose={() => setShowFiltersMobile(false)} />
-                </div>
-              </div>
-            )}
-
-            {/* Job list — 400px on desktop, full width on mobile; hidden on mobile once a job is selected */}
-            <div className={`w-full lg:w-[400px] shrink-0 flex-col bg-[#f9f9ff] lg:border-x border-slate-200 ${selectedJob ? "hidden lg:flex" : "flex"}`}>
-
-              {/* column header */}
-              <div className="shrink-0 bg-white border-b border-slate-200 px-5 pt-4 pb-3.5">
-                <div className="flex items-center justify-between gap-2">
-                  <h1 className="text-sm font-bold text-slate-900">
-                    {loading ? "Loading…" : `${visibleJobs.length} ${activeTab === "saved" ? "Saved" : "Roles found"}`}
-                  </h1>
-                  <button
-                    onClick={() => setShowFiltersMobile(true)}
-                    className="lg:hidden shrink-0 text-xs font-semibold text-slate-500 px-2.5 h-7 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-                  >
-                    Filters
-                  </button>
-                  <span className="hidden lg:inline text-[11px] text-slate-400 font-medium">Sorted by fit score</span>
-                </div>
-
-                <div className="relative mt-2.5">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-                    </svg>
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="Search roles or companies…"
-                    value={filters.search}
-                    onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                    className="h-9 w-full pl-9 pr-3 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 focus:bg-white transition-all"
-                  />
-                </div>
-              </div>
-
-              {error && (
-                <div className="mx-3 mt-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs shrink-0">
-                  {error}
-                </div>
-              )}
-
-              <div className="flex-1 overflow-y-auto p-3">
-                {loading ? (
-                  <div className="flex items-center justify-center h-32">
-                    <p className="text-sm text-slate-400">Loading…</p>
-                  </div>
-                ) : (
-                  <JobList jobs={visibleJobs} selectedId={selectedJob?.id ?? null} onSelect={setSelectedJob} />
-                )}
-              </div>
-            </div>
-
-            {/* Job detail — fills rest on desktop, full width on mobile once a job is selected */}
-            <div className={`w-full lg:flex-1 overflow-hidden ${selectedJob ? "block" : "hidden lg:block"}`}>
-              <JobDetail
-                job={selectedJob}
-                onToggleSaved={toggleSaved}
-                onUpdateStatus={updateStatus}
-                onBack={() => setSelectedJob(null)}
-              />
-            </div>
-          </>
-        )}
-
+      <div className="shrink-0 border-b border-[#E3E6EA] bg-white px-3 py-2 md:hidden">
+        <Tabs className="relative grid w-full" fluid />
       </div>
 
-      {/* ── Footer ── */}
-      <footer className="shrink-0 h-7 bg-white border-t border-slate-200 items-center justify-center hidden lg:flex">
-        <a
-          href="https://logo.dev"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] text-slate-400 hover:text-slate-500 transition-colors"
-        >
-          Logos by Logo.dev
-        </a>
-      </footer>
+      <main className="flex min-h-0 flex-1">
+        {load.state === "loading" ? (
+          <Message title="Loading roles…" status />
+        ) : load.state === "error" ? (
+          <LoadError message={load.message} />
+        ) : (
+          <>
+            {view === "radar" && <RadarView />}
+            {view === "shortlist" && <ShortlistView />}
+            {view === "pipeline" && <PipelineView />}
+          </>
+        )}
+      </main>
 
-      {/* ── Bottom tab bar — mobile only ── */}
-      <nav className="lg:hidden shrink-0 h-14 bg-white border-t border-slate-200 flex items-stretch">
-        {NAV_TABS.map(({ label, value }) => {
-          const active = value === activeTab;
-          return (
-            <button
-              key={label}
-              onClick={() => { setActiveTab(value); setSelectedJob(null); }}
-              className={`flex-1 text-sm font-medium transition-colors ${
-                active ? "text-[#003fa3] font-semibold" : "text-slate-500"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </nav>
-
-      {showAddJob && (
-        <AddJobModal
-          onClose={() => setShowAddJob(false)}
-          onAdded={(job) => {
-            setJobs((prev) => [job, ...prev]);
-            setSelectedJob(job);
-            setActiveTab("dashboard");
-          }}
-        />
-      )}
+      <Toaster />
+      {adding && <AddRoleDialog onClose={() => setAdding(false)} />}
     </div>
+  );
+}
+
+function Tabs({ className, fluid = false }: { className: string; fluid?: boolean }) {
+  const { view, setView, saved, tracked, load } = useStore();
+  const ready = load.state === "ready";
+  const tabs: { id: View; label: string; count?: number }[] = [
+    { id: "radar", label: "Radar" },
+    { id: "shortlist", label: "Shortlist", count: ready ? saved.length : undefined },
+    { id: "pipeline", label: "Pipeline", count: ready ? tracked.length : undefined },
+  ];
+  const index = tabs.findIndex((t) => t.id === view);
+
+  return (
+    <nav aria-label="Main" className={`${className} grid-cols-3 rounded-[9px] bg-[#F0F1F4] p-[3px]`}>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute bottom-[3px] left-[3px] top-[3px] w-[calc((100%-6px)/3)] rounded-[6px] bg-white shadow-[0_1px_2px_rgb(15_18_23/0.08),0_0_0_0.5px_rgb(15_18_23/0.06)] transition-transform duration-200 ease-[cubic-bezier(0.77,0,0.175,1)] motion-reduce:transition-none"
+        style={{ transform: `translateX(${index * 100}%)` }}
+      />
+      {tabs.map((t) => {
+        const active = t.id === view;
+        return (
+          <button
+            key={t.id}
+            onClick={() => setView(t.id)}
+            aria-current={active ? "page" : undefined}
+            className={`relative flex h-[26px] items-center justify-center gap-1.5 rounded-[6px] text-[13px] font-medium transition-colors duration-150 ${fluid ? "w-full" : "w-[112px]"} ${focusRing} ${
+              active ? "text-[#0F1217]" : "text-[#5F6570] hover:text-[#0F1217]"
+            }`}
+          >
+            {t.label}
+            {t.count !== undefined && (
+              <span className="text-[12px] tabular-nums text-[#6B717B]">
+                {t.count}<span className="sr-only"> roles</span>
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+function Message({ title, body, status, children }: { title: string; body?: string; status?: boolean; children?: React.ReactNode }) {
+  return (
+    <div className="grid flex-1 place-items-center px-6 text-center" role={status ? "status" : undefined}>
+      <div>
+        <p className="text-[14px] font-medium">{title}</p>
+        {body && <p className="mx-auto mt-1 max-w-[48ch] text-[13px] text-[#5F6570]">{body}</p>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function LoadError({ message }: { message: string }) {
+  const { reload } = useStore();
+  return (
+    <Message title="Couldn't load roles" body={message}>
+      <button onClick={reload} className={`${btnSecondary} mt-4`}>Try again</button>
+    </Message>
   );
 }
