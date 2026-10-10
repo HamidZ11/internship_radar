@@ -1,23 +1,83 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  html { color-scheme: light; }
   body {
-    font-family: 'Manrope', system-ui, sans-serif;
-    @apply bg-[#f9f9ff] text-slate-900 antialiased;
+    font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #F4F5F7;
+    color: #0F1217;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
   }
+  ::selection { background: rgb(43 85 214 / 0.16); }
+  input, textarea { caret-color: #2B55D6; }
+}
 
-  input[type="number"]::-webkit-inner-spin-button,
-  input[type="number"]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
+/* A scroll area whose edge must stay flush with a neighbouring pane. */
+.ui-noscrollbar { scrollbar-width: none; }
+.ui-noscrollbar::-webkit-scrollbar { display: none; }
+
+::-webkit-scrollbar        { width: 8px; height: 8px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: rgb(0 0 0 / 0.12); border-radius: 99px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgb(0 0 0 / 0.22); }
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+
+/* Popovers scale in from their trigger, ease-out, under 200ms. */
+.ui-pop {
+  transform-origin: top left;
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.ui-pop[data-align="end"] { transform-origin: top right; }
+@starting-style {
+  .ui-pop { opacity: 0; transform: scale(0.97) translateY(-2px); }
+}
+/* Bottom sheets (filters on narrow screens) rise instead. */
+@media (max-width: 767px) {
+  @starting-style {
+    .ui-pop[data-sheet] { opacity: 0; transform: translateY(12px); }
   }
 }
 
-/* thin custom scrollbar */
-::-webkit-scrollbar        { width: 5px; height: 5px; }
-::-webkit-scrollbar-track  { background: transparent; }
-::-webkit-scrollbar-thumb  { background: #cbd5e1; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+.ui-fade { transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1); }
+@starting-style {
+  .ui-fade { opacity: 0; }
+}
+
+/* Toasts rise a few px; transitions (not keyframes) so rapid toasts retarget. */
+.ui-toast { transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1), transform 220ms cubic-bezier(0.23, 1, 0.32, 1); }
+@starting-style {
+  .ui-toast { opacity: 0; transform: translateY(8px); }
+}
+
+/* Disclosures fade content in; the height change is instant. */
+.ui-reveal { transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1), transform 180ms cubic-bezier(0.23, 1, 0.32, 1); }
+@starting-style {
+  .ui-reveal { opacity: 0; transform: translateY(-4px); }
+}
+
+/* Press feedback. */
+.ui-press { transition-property: transform, background-color, color, border-color, box-shadow; transition-duration: 160ms; transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+.ui-press:active:not(:disabled) { transform: scale(0.96); }
+
+/* Icon swap: scale .25→1, opacity 0→1, blur 4px→0. */
+.ui-icon-swap { display: inline-grid; }
+.ui-icon-swap > * { grid-area: 1 / 1; transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1), transform 200ms cubic-bezier(0.2, 0, 0, 1), filter 200ms cubic-bezier(0.2, 0, 0, 1); }
+.ui-icon-swap > [data-off] { opacity: 0; transform: scale(0.25); filter: blur(4px); }
+
+/* A changed row briefly takes a tint so the eye can find where it went. */
+@keyframes ui-flash { from { background-color: rgb(59 130 246 / 0.12); } }
+.ui-flash { animation: ui-flash 900ms cubic-bezier(0.23, 1, 0.32, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-pop, .ui-toast, .ui-reveal { transition-property: opacity; }
+  .ui-pop[data-sheet] { transform: none; }
+  .ui-press:active:not(:disabled) { transform: none; }
+  .ui-icon-swap > * { transition-property: opacity; }
+  .ui-icon-swap > [data-off] { transform: none; filter: none; }
+  .ui-flash { animation: none; }
+}
